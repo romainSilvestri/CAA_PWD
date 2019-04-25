@@ -101,15 +101,18 @@ int main() {
 
         string storedSalt = base64_decode(storedEncodedSalt);
 
-        unsigned char key[crypto_secretbox_KEYBYTES]; // TODO: faire un malloc pour ca que l'on libère après
+        unsigned char key[crypto_box_SEEDBYTES]; // TODO: faire un malloc pour ca que l'on libère après
 
-
-        if(crypto_pwhash(key, sizeof key, pwd, strlen(pwd), (unsigned char*) storedSalt.c_str(), crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
+        if(crypto_pwhash(key, sizeof(key), pwd, strlen(pwd), (unsigned char*) storedSalt.c_str(), crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
             cout << "Failure in KDF" << endl;
-            /*sodium_free(pwd);
+            sodium_free(pwd);
             fclose(db);
-            return EXIT_FAILURE;*/
+            return EXIT_FAILURE;
         }
+
+        string encodedKey = base64_encode(key, sizeof(key));
+        cout << encodedKey << endl;
+
 
 
         fclose(db);
