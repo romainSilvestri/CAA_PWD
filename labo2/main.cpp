@@ -24,12 +24,14 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    const string FILEPATH = "../db.txt";
+
     bool first = true;
 
-    FILE* db = fopen("../db.txt", "r+");
+    FILE* db = fopen(FILEPATH.c_str(), "r+");
 
     if(db == NULL){
-        db = fopen("../db.txt", "wr+");
+        db = fopen(FILEPATH.c_str(), "wr+");
 
         char* pwd = (char*) sodium_malloc(PASSWORD_SIZE + 1); // on met + 1 pour avoir la place pour le \0
         if(pwd == NULL){
@@ -62,7 +64,7 @@ int main() {
     while(true){
 
         if(!first){
-            db = fopen("../db.txt", "r+");
+            db = fopen(FILEPATH.c_str(), "r+");
         }
         char* pwd = (char*) sodium_malloc(PASSWORD_SIZE + 1); // on met + 1 pour avoir la place pour le \0
         if (pwd == NULL) {
@@ -148,7 +150,7 @@ int main() {
             }
 
             if(command == "store"){
-                file.open("../db.txt", ios::app);
+                file.open(FILEPATH, ios::app);
 
                 cout << "Please enter the site name: " << endl;
                 cin >> siteName;
@@ -173,9 +175,7 @@ int main() {
                     continue;
                 }
 
-                //sodium_free(newPwd);
-                cout << strlen((char*) newPwd) << endl;
-                cout << strlen((char*) &cipher) -crypto_secretbox_KEYBYTES << endl;
+                sodium_free(newPwd);
 
                 string encodedNonce = base64_encode(nonce, sizeof(nonce));
                 string encodedCipher = base64_encode(cipher, sizeof(cipher));
@@ -189,7 +189,7 @@ int main() {
                 string encodedStoredPwd;
                 string encodedStoredNonce;
 
-                file.open("../db.txt");
+                file.open(FILEPATH);
 
                 getline(file, line); // get the first line which is the hash
                 getline(file, line); // get the second line which is the salt
@@ -209,33 +209,25 @@ int main() {
                 }
 
                 if(found){
-                    cout << encodedStoredPwd << endl;
-                    cout << encodedStoredNonce << endl;
                     unsigned char* recoverResult = (unsigned char*) sodium_malloc(PASSWORD_SIZE + 1);
                     if (recoverResult == NULL) {
                         cout << "Error allocating space" << endl;
                         break;
                     }
-                    recoverResult[PASSWORD_SIZE] = '\0';
 
                     string storedPwd = base64_decode(encodedStoredPwd);
                     string storedNonce = base64_decode(encodedStoredNonce);
 
-                    cout << storedPwd << endl;
-                    cout << storedNonce << endl;
+                    recoverResult[storedPwd.size() - crypto_secretbox_KEYBYTES] = '\0';
 
-                    cout << "before decode " << endl;
                     if(decode(recoverResult, (unsigned char*) storedPwd.c_str(), (unsigned char*) storedNonce.c_str(), key) != 0 ){
                         cout << "Error while recovering password" << endl;
                         sodium_free(recoverResult);
                         continue;
                     }
 
-                    cout << "after decode" << endl;
-
                     cout << recoverResult << endl;
 
-                    cout << "end" << endl;
                     sodium_free(recoverResult);
 
                 }else{
