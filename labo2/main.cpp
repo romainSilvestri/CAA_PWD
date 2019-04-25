@@ -8,16 +8,15 @@
 
 using namespace std;
 
-void encode(unsigned char* cipher, unsigned char* key, unsigned char* nonce, unsigned char* msg){
+void encode(unsigned char* cipher, unsigned char* msg, unsigned char* nonce,  unsigned char* key){
 
     randombytes_buf(nonce, sizeof nonce);
     crypto_secretbox_easy(cipher, msg, strlen((char*) msg), nonce, key);
 }
 
-void decode(unsigned char* cipher, unsigned char* key, unsigned char* nonce, unsigned char* plain){
+void decode(unsigned char* plain, unsigned char* cipher, unsigned char* nonce, unsigned char* key){
     int ret = crypto_secretbox_open_easy(plain, cipher, strlen((char*) cipher), nonce, key);
 }
-
 
 int main() {
 
@@ -101,7 +100,7 @@ int main() {
 
         string storedSalt = base64_decode(storedEncodedSalt);
 
-        unsigned char key[crypto_box_SEEDBYTES]; // TODO: faire un malloc pour ca que l'on libère après
+        unsigned char key[crypto_secretbox_KEYBYTES]; // TODO: faire un malloc pour ca que l'on libère après
 
         if(crypto_pwhash(key, sizeof(key), pwd, strlen(pwd), (unsigned char*) storedSalt.c_str(), crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
             cout << "Failure in KDF" << endl;
@@ -109,11 +108,6 @@ int main() {
             fclose(db);
             return EXIT_FAILURE;
         }
-
-        string encodedKey = base64_encode(key, sizeof(key));
-        cout << encodedKey << endl;
-
-
 
         fclose(db);
         sodium_free(pwd);
@@ -127,7 +121,7 @@ int main() {
 
             cout << "Please enter the command (lock, change, store or recover): " << endl;
 
-            cin >> command;
+            cin >> command; // todo: regarder pour mettre des fgets(variable, taille, stdin)
 
             if(command == "lock"){
                 // TODO: free la clé
@@ -168,9 +162,14 @@ int main() {
                 cin >> newPwd;
 
                 unsigned char nonce[crypto_secretbox_NONCEBYTES];
-                unsigned char cipher[crypto_secretbox_KEYBYTES + siteName.size()];
+                unsigned char cipher[crypto_secretbox_KEYBYTES + strlen((char*) newPwd)];
+                unsigned char plain[PASSWORD_SIZE + 1];
 
-                encode(cipher, key, nonce, newPwd);
+                cout << newPwd << endl;
+                encode(cipher, newPwd, nonce, key);
+                cout << base64_encode(cipher, sizeof(cipher)) << endl;
+                decode(cipher, plain, nonce, key);
+                cout << plain << endl;
 
                 sodium_free(newPwd);
 
@@ -191,7 +190,8 @@ int main() {
 
                 file.open("../db.txt");
 
-                getline(file, line); // get the first line which is the hash;
+                getline(file, line); // get the first line which is the hash
+                getline(file, line); // get the second line which is the salt
 
                 cout << "Please enter the site name: " << endl;
                 cin >> siteName;
@@ -216,8 +216,8 @@ int main() {
                     unsigned char* nonce[nonceString.size() + 1];
                     strcpy((char*) nonce, nonceString.c_str());
 
-                    decode(*cipherPwd, key, *nonce, plain);*/
-                    cout << cipherPwdString << endl; // todo: call the decypher function
+                    decode(*cipherPwd, plain, *nonce, key);*/
+                    cout << cipherPwdString << endl; // todo: call the decypher function and put the password in malloc
                     cout << nonceString << endl;
                 }else{
                     cout << "Not found" << endl;
