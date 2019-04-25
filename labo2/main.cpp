@@ -14,8 +14,8 @@ void encode(unsigned char* cipher, unsigned char* msg, unsigned char* nonce,  un
     crypto_secretbox_easy(cipher, msg, strlen((char*) msg), nonce, key);
 }
 
-void decode(unsigned char* plain, unsigned char* cipher, unsigned char* nonce, unsigned char* key){
-    int ret = crypto_secretbox_open_easy(plain, cipher, strlen((char*) cipher), nonce, key);
+int decode(unsigned char* plain, unsigned char* cipher, unsigned char* nonce, unsigned char* key){
+    return crypto_secretbox_open_easy(plain, cipher, strlen((char*) cipher), nonce, key);
 }
 
 int main() {
@@ -152,7 +152,7 @@ int main() {
 
                 cout << "Please enter the site name: " << endl;
                 cin >> siteName;
-                cout << "Please enter the password: "  << endl;
+                cout << "Please enter the password (min: 6 char): "  << endl;
 
                 unsigned char* newPwd = (unsigned char*) sodium_malloc(PASSWORD_SIZE + 1); // on met + 1 pour avoir la place pour le \0
                 if (newPwd == NULL) {
@@ -168,7 +168,11 @@ int main() {
                 cout << newPwd << endl;
                 encode(cipher, newPwd, nonce, key);
                 cout << base64_encode(cipher, sizeof(cipher)) << endl;
-                decode(cipher, plain, nonce, key);
+                if(decode(plain, cipher, nonce, key)){
+                    cout << "Error, password to short" << endl;
+                    sodium_free(newPwd);
+                    break;
+                }
                 cout << plain << endl;
 
                 sodium_free(newPwd);
