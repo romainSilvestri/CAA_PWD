@@ -173,7 +173,9 @@ int main() {
                     continue;
                 }
 
-                sodium_free(newPwd);
+                //sodium_free(newPwd);
+                cout << strlen((char*) newPwd) << endl;
+                cout << strlen((char*) &cipher) -crypto_secretbox_KEYBYTES << endl;
 
                 string encodedNonce = base64_encode(nonce, sizeof(nonce));
                 string encodedCipher = base64_encode(cipher, sizeof(cipher));
@@ -214,6 +216,7 @@ int main() {
                         cout << "Error allocating space" << endl;
                         break;
                     }
+                    recoverResult[PASSWORD_SIZE] = '\0';
 
                     string storedPwd = base64_decode(encodedStoredPwd);
                     string storedNonce = base64_decode(encodedStoredNonce);
