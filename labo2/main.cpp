@@ -163,25 +163,20 @@ int main() {
 
                 unsigned char nonce[crypto_secretbox_NONCEBYTES];
                 unsigned char cipher[crypto_secretbox_KEYBYTES + strlen((char*) newPwd)];
-                unsigned char plain[PASSWORD_SIZE + 1];
 
-                cout << newPwd << endl;
                 encode(cipher, newPwd, nonce, key);
-                cout << base64_encode(cipher, sizeof(cipher)) << endl;
-                if(decode(plain, cipher, nonce, key)){
-                    cout << "Error, password to short" << endl;
+
+                // We decode it on the spot to see if the password was a supported one. The decode doesn't work with 6 or less char passwords and 8 char passwords.
+                if(decode(newPwd, cipher, nonce, key)){
+                    cout << "Error, invalid password" << endl;
                     sodium_free(newPwd);
-                    break;
+                    continue;
                 }
-                cout << plain << endl;
 
                 sodium_free(newPwd);
 
                 string encodedNonce = base64_encode(nonce, sizeof(nonce));
                 string encodedCipher = base64_encode(cipher, sizeof(cipher));
-
-
-                // todo: chiffrer le newPwd, le mettre en b64 , mettre le nonce en b64 et le stocker aussi
 
                 file << siteName << delimiter << encodedCipher << delimiter << encodedNonce << endl;
             }
@@ -189,8 +184,8 @@ int main() {
             if(command == "recover"){
                 string line;
                 bool found = false;
-                string cipherPwdString;
-                string nonceString;
+                string encodedStoredPwd;
+                string encodedStoredNonce;
 
                 file.open("../db.txt");
 
@@ -205,24 +200,41 @@ int main() {
                     if(storedSite == siteName){
                         found = true;
                         string tmp = line.substr(line.find(delimiter) + delimiter.size());
-                        cipherPwdString = tmp.substr(0, tmp.find(delimiter));
-                        nonceString = tmp.substr(tmp.find(delimiter) + delimiter.size());
+                        encodedStoredPwd = tmp.substr(0, tmp.find(delimiter));
+                        encodedStoredNonce = tmp.substr(tmp.find(delimiter) + delimiter.size());
                         break;
                     }
                 }
 
                 if(found){
-                    cout << "found" << endl;
-                    /*
-                    unsigned char plain[1000];
-                    unsigned char* cipherPwd[cipherPwdString.size() + 1];
-                    strcpy((char*) cipherPwd, cipherPwdString.c_str());
-                    unsigned char* nonce[nonceString.size() + 1];
-                    strcpy((char*) nonce, nonceString.c_str());
+                    cout << encodedStoredPwd << endl;
+                    cout << encodedStoredNonce << endl;
+                    unsigned char* recoverResult = (unsigned char*) sodium_malloc(PASSWORD_SIZE + 1);
+                    if (recoverResult == NULL) {
+                        cout << "Error allocating space" << endl;
+                        break;
+                    }
 
-                    decode(*cipherPwd, plain, *nonce, key);*/
-                    cout << cipherPwdString << endl; // todo: call the decypher function and put the password in malloc
-                    cout << nonceString << endl;
+                    string storedPwd = base64_decode(encodedStoredPwd);
+                    string storedNonce = base64_decode(encodedStoredNonce);
+
+                    cout << storedPwd << endl;
+                    cout << storedNonce << endl;
+
+                    cout << "before decode " << endl;
+                    if(decode(recoverResult, (unsigned char*) storedPwd.c_str(), (unsigned char*) storedNonce.c_str(), key) != 0 ){
+                        cout << "Error while recovering password" << endl;
+                        sodium_free(recoverResult);
+                        continue;
+                    }
+
+                    cout << "after decode" << endl;
+
+                    cout << recoverResult << endl;
+
+                    cout << "end" << endl;
+                    sodium_free(recoverResult);
+
                 }else{
                     cout << "Not found" << endl;
                 }
