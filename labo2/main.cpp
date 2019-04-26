@@ -25,6 +25,7 @@ int main() {
     }
 
     const string FILEPATH = "../db.txt";
+    const string TMPPATH = "../tmp.txt";
 
     bool first = true;
 
@@ -102,11 +103,18 @@ int main() {
 
         string storedSalt = base64_decode(storedEncodedSalt);
 
-        unsigned char key[crypto_secretbox_KEYBYTES]; // TODO: faire un malloc pour ca que l'on libère après
 
-        if(crypto_pwhash(key, sizeof(key), pwd, strlen(pwd), (unsigned char*) storedSalt.c_str(), crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
+        unsigned char* key = (unsigned char*) sodium_malloc(crypto_secretbox_KEYBYTES);
+        if (key == NULL) {
+            cout << "Error allocating space" << endl;
+            sodium_free(pwd);
+            break;
+        }
+
+        if(crypto_pwhash(key, crypto_secretbox_KEYBYTES, pwd, strlen(pwd), (unsigned char*) storedSalt.c_str(), crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
             cout << "Failure in KDF" << endl;
             sodium_free(pwd);
+            sodium_free(key);
             fclose(db);
             return EXIT_FAILURE;
         }
@@ -126,11 +134,16 @@ int main() {
             cin >> command; // todo: regarder pour mettre des fgets(variable, taille, stdin)
 
             if(command == "lock"){
-                // TODO: free la clé
+                sodium_free(key);
                 break;
             }
 
             if(command == "change"){
+
+                file.open(FILEPATH);
+                fstream newDB;
+
+                newDB.open("../tmp.txt", ios::app);
 
                 char* newPwd = (char*) sodium_malloc(PASSWORD_SIZE + 1); // on met + 1 pour avoir la place pour le \0
                 if (newPwd == NULL) {
@@ -141,11 +154,91 @@ int main() {
                 cout << "Enter the new master password of, at most," << PASSWORD_SIZE << " char:" << endl;
                 cin >> newPwd;
 
-                cout << newPwd << endl;
+                unsigned char newSalt[crypto_pwhash_SALTBYTES];
+                randombytes_buf(newSalt, sizeof newSalt);
+                string encodedNewSalt = base64_encode(newSalt, sizeof(newSalt));
 
-                // todo: refaire le KDF et tout rechiffrer.
+                unsigned char* newKey = (unsigned char*) sodium_malloc(crypto_secretbox_KEYBYTES);
+                if (newKey == NULL) {
+                    cout << "Error allocating space" << endl;
+                    sodium_free(newPwd);
+                    sodium_free(key);
+                    break;
+                }
+
+                if(crypto_pwhash(newKey, crypto_secretbox_KEYBYTES, newPwd, strlen(newPwd), newSalt, crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN, crypto_pwhash_ALG_DEFAULT)) {
+                    cout << "Failure in KDF" << endl;
+                    sodium_free(newPwd);
+                    sodium_free(newKey);
+                    sodium_free(key);
+                    fclose(db);
+                    return EXIT_FAILURE;
+                }
+
+                char newHashedPwd[crypto_pwhash_STRBYTES];
+                if(crypto_pwhash_str(newHashedPwd, newPwd, strlen(newPwd), crypto_pwhash_OPSLIMIT_MIN, crypto_pwhash_MEMLIMIT_MIN)){ // TODO: remettre en sensitive
+                    sodium_free(newPwd);
+                    sodium_free(newKey);
+                    sodium_free(key);
+                    newDB.close();
+                    return EXIT_FAILURE;
+                }
+
+                newDB << newHashedPwd << endl;
+                newDB << encodedNewSalt << endl;
 
                 sodium_free(newPwd);
+
+                string line;
+                getline(file, line); // Remove the hash
+                getline(file, line); // Remove the salt
+
+                // Iterate over all the stored sites
+                while(getline(file, line)){
+                    string storedSite = line.substr(0, line.find(delimiter));
+                    string tmp = line.substr(line.find(delimiter) + delimiter.size());
+                    string encodedStoredPwd = tmp.substr(0, tmp.find(delimiter));
+                    string encodedStoredNonce = tmp.substr(tmp.find(delimiter) + delimiter.size());
+
+                    unsigned char* recoverResult = (unsigned char*) sodium_malloc(PASSWORD_SIZE + 1);
+                    if (recoverResult == NULL) {
+                        cout << "Error allocating space" << endl;
+                        break;
+                    }
+
+                    string storedPwd = base64_decode(encodedStoredPwd);
+                    string storedNonce = base64_decode(encodedStoredNonce);
+
+                    // Add a \0 at the end of the recovered password so we can print it
+                    recoverResult[storedPwd.size() - crypto_secretbox_KEYBYTES] = '\0';
+
+                    if(decode(recoverResult, (unsigned char*) storedPwd.c_str(), (unsigned char*) storedNonce.c_str(), key) != 0 ){
+                        cout << "Error while recovering password" << endl;
+                        sodium_free(newKey);
+                        sodium_free(key);
+                        sodium_free(recoverResult);
+                        return EXIT_FAILURE;
+                    }
+
+                    unsigned char nonce[crypto_secretbox_NONCEBYTES];
+                    unsigned char cipher[crypto_secretbox_KEYBYTES + strlen((char*) recoverResult)];
+
+                    encode(cipher, recoverResult, (unsigned char*) nonce, newKey);
+
+                    string encodedNonce = base64_encode(nonce, sizeof(nonce));
+                    string encodedCipher = base64_encode(cipher, sizeof(cipher));
+
+                    newDB << storedSite << delimiter << encodedCipher << delimiter << encodedNonce << endl;
+
+                    sodium_free(recoverResult);
+                }
+
+                remove(FILEPATH.c_str());
+                rename("../tmp.txt", FILEPATH.c_str());
+
+                sodium_free(key);
+                sodium_free(newKey);
+                file.close();
                 break;
             }
 
@@ -218,6 +311,7 @@ int main() {
                     string storedPwd = base64_decode(encodedStoredPwd);
                     string storedNonce = base64_decode(encodedStoredNonce);
 
+                    // Add a \0 at the end of the recovered password so we can print it
                     recoverResult[storedPwd.size() - crypto_secretbox_KEYBYTES] = '\0';
 
                     if(decode(recoverResult, (unsigned char*) storedPwd.c_str(), (unsigned char*) storedNonce.c_str(), key) != 0 ){
