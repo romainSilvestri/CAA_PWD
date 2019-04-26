@@ -143,7 +143,7 @@ int main() {
                 file.open(FILEPATH);
                 fstream newDB;
 
-                newDB.open("../tmp.txt", ios::app);
+                newDB.open(TMPPATH.c_str(), ios::app);
 
                 char* newPwd = (char*) sodium_malloc(PASSWORD_SIZE + 1); // on met + 1 pour avoir la place pour le \0
                 if (newPwd == NULL) {
@@ -234,7 +234,7 @@ int main() {
                 }
 
                 remove(FILEPATH.c_str());
-                rename("../tmp.txt", FILEPATH.c_str());
+                rename(TMPPATH.c_str(), FILEPATH.c_str());
 
                 sodium_free(key);
                 sodium_free(newKey);
